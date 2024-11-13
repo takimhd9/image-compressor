@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import imageCompression from 'browser-image-compression';
-import { Download, X } from 'lucide-react';
+import { Download, X, Image, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -10,6 +10,28 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
   const listRef = useRef(null);
+  const [compressionLevel, setCompressionLevel] = useState('medium');
+
+  const compressionOptions = {
+    high: {
+      label: 'High Quality',
+      maxSizeMB: 2,
+      maxWidthOrHeight: 2560,
+      description: 'Larger file size, better quality'
+    },
+    medium: {
+      label: 'Balanced',
+      maxSizeMB: 1,
+      maxWidthOrHeight: 1920,
+      description: 'Recommended for most uses'
+    },
+    low: {
+      label: 'Small Size',
+      maxSizeMB: 0.5,
+      maxWidthOrHeight: 1280,
+      description: 'Smallest file size, reduced quality'
+    }
+  };
 
   const simulateProgress = async (id) => {
     for (let progress = 0; progress <= 100; progress += 2) {
@@ -23,8 +45,7 @@ function App() {
 
   const compressImage = async (imageFile) => {
     const options = {
-      maxSizeMB: 1,
-      maxWidthOrHeight: 1920,
+      ...compressionOptions[compressionLevel],
       useWebWorker: true
     };
 
@@ -124,6 +145,62 @@ function App() {
       return newImages;
     });
   }, []);
+
+  const handleCompressionChange = async (newLevel) => {
+    setCompressionLevel(newLevel);
+    
+    // Recompress all existing images with new quality
+    setLoading(true);
+    
+    const updatedImages = [...compressedImages];
+    
+    for (let i = 0; i < updatedImages.length; i++) {
+      const image = updatedImages[i];
+      if (!image.file) continue; // Skip if no original file
+      
+      // Update progress
+      setUploadProgress(prev => ({
+        ...prev,
+        [image.id]: 0
+      }));
+      
+      // Show processing state
+      setCompressedImages(prev => prev.map(img =>
+        img.id === image.id
+          ? { ...img, processing: true, progress: 0 }
+          : img
+      ));
+      
+      await simulateProgress(image.id);
+      
+      const compressedResult = await compressImage(image.file);
+      
+      if (compressedResult) {
+        // Revoke old URL to prevent memory leaks
+        if (image.url) {
+          URL.revokeObjectURL(image.url);
+        }
+        
+        setCompressedImages(prev => prev.map(img =>
+          img.id === image.id
+            ? {
+                ...img,
+                ...compressedResult,
+                processing: false,
+                progress: 100
+              }
+            : img
+        ));
+      }
+      
+      // Small delay between processing images
+      if (i < updatedImages.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+    
+    setLoading(false);
+  };
 
   return (
     <div className="min-h-screen bg-black">
@@ -232,6 +309,9 @@ function App() {
                             <p className="text-blue-400">
                               {((1 - image.compressedSize / image.originalSize) * 100).toFixed(1)}% saved
                             </p>
+                            <p className="text-gray-400">
+                              • {compressionOptions[compressionLevel].label}
+                            </p>
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -259,6 +339,34 @@ function App() {
 
         {/* Adjust dropzone width based on whether images exist */}
         <div className={`${compressedImages.length > 0 ? 'w-1/2' : 'w-full'} p-8 flex flex-col`}>
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Sliders className="w-4 h-4 text-gray-400" />
+              <h3 className="text-gray-200 text-sm font-medium">Compression Quality</h3>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {Object.entries(compressionOptions).map(([key, option]) => (
+                <button
+                  key={key}
+                  onClick={() => handleCompressionChange(key)}
+                  className={`p-3 rounded-lg text-left transition-all ${
+                    compressionLevel === key
+                      ? 'bg-blue-500/10 border-blue-500/50 border-2'
+                      : 'bg-gray-800 border-2 border-gray-700 hover:border-gray-600'
+                  }`}
+                >
+                  <div className={`font-medium mb-1 ${
+                    compressionLevel === key ? 'text-blue-400' : 'text-gray-200'
+                  }`}>
+                    {option.label}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {option.description}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
           <div 
             {...getRootProps()} 
             className={`flex-1 p-10 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-colors
@@ -268,6 +376,16 @@ function App() {
           >
             <input {...getInputProps()} />
             <div className="text-center">
+              <motion.div
+                className="flex justify-center mb-4"
+                whileHover={{ scale: 1.1, rotate: [-5, 5, 0] }}
+                transition={{ duration: 0.3 }}
+              >
+                <Image 
+                  className={`w-12 h-12 ${isDragActive ? 'text-blue-500' : 'text-gray-400'}`}
+                  strokeWidth={1.5}
+                />
+              </motion.div>
               <p className="text-gray-400">
                 {isDragActive ? 'Drop the JPEGs here...' : 'Drag and drop JPEG files here, or click to select files'}
               </p>
