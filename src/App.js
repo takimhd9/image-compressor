@@ -6,6 +6,8 @@ import './App.css';
 function App() {
   const [compressedImage, setCompressedImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [originalSize, setOriginalSize] = useState(null);
+  const [compressedSize, setCompressedSize] = useState(null);
 
   const compressImage = async (imageFile) => {
     const options = {
@@ -16,7 +18,11 @@ function App() {
 
     try {
       setLoading(true);
+      setOriginalSize(imageFile.size);
+      
       const compressedFile = await imageCompression(imageFile, options);
+      setCompressedSize(compressedFile.size);
+      
       const url = URL.createObjectURL(compressedFile);
       setCompressedImage(url);
       setLoading(false);
@@ -59,6 +65,13 @@ function App() {
         {compressedImage && (
           <div className="result">
             <h3>Compressed Image:</h3>
+            {originalSize && compressedSize && (
+              <div className="size-comparison">
+                <p>Original size: {(originalSize / 1024 / 1024).toFixed(2)} MB</p>
+                <p>Compressed size: {(compressedSize / 1024 / 1024).toFixed(2)} MB</p>
+                <p>Compression ratio: {((1 - compressedSize / originalSize) * 100).toFixed(1)}%</p>
+              </div>
+            )}
             <img src={compressedImage} alt="Compressed" />
             <a href={compressedImage} download="compressed-image.jpg" className="download-btn">
               Download Compressed Image
